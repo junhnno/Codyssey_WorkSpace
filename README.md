@@ -27,6 +27,22 @@
 - [x] Docker 볼륨 영속성 검증
 - [x] Git 설정 및 GitHub 연동
 
+## 3-1. 프로젝트 디렉토리 구조
+```
+Codyssey_WorkSpace/
+├── .git/           # Git 관리 폴더 (자동 생성, 수정 금지)
+├── app/            # 웹서버 소스코드
+│   └── index.html  # nginx가 서빙할 HTML 파일
+├── practice/       # 터미널 조작 실습용 폴더
+│   └── hello.txt   # 실습 중 생성한 파일
+├── Dockerfile      # 커스텀 이미지 빌드 설계도
+└── README.md       # 기술 문서
+```
+
+**구성 기준**
+- `app/` → 웹서버 소스코드를 별도 폴더로 분리하여 Dockerfile의 COPY 경로를 명확하게 관리
+- `practice/` → 터미널 실습 내용을 저장소 루트와 분리하여 실습 흔적을 명확히 구분
+- `Dockerfile` → 저장소 루트에 위치시켜 `docker build .` 명령을 루트에서 바로 실행 가능하게 구성
 ## 4. 터미널 조작 로그
 
 ### 현재 위치 확인
@@ -107,9 +123,51 @@ drwxr-xr-x 1 aptl4 197609  0  4월  1 14:41 ./
 drwxr-xr-x 1 aptl4 197609  0  4월  1 14:22 ../
 -rw-r--r-- 1 aptl4 197609 15  4월  1 14:33 hello.txt
 ```
+### 절대 경로 vs 상대 경로
 
+**절대 경로** — 루트(`/`)부터 시작하는 전체 경로
+```bash
+cd /c/Main_Folder/Coding/Codyssey_WorkSpace
+# 어디서 실행해도 항상 같은 위치로 이동
+```
+
+**상대 경로** — 현재 위치 기준으로 표현하는 경로
+```bash
+cd practice      # 현재 위치 안의 practice 폴더로 이동
+cd ..            # 현재 위치에서 한 단계 위로 이동
+cd ./app         # 현재 위치 안의 app 폴더로 이동 (./ 생략 가능)
+```
+
+**선택 기준**
+
+| 상황 | 선택 | 이유 |
+|---|---|---|
+| 스크립트, 자동화 | 절대 경로 | 실행 위치가 달라도 항상 동일하게 동작 |
+| 터미널 직접 입력 | 상대 경로 | 타이핑이 짧고 빠름 |
+| Dockerfile COPY | 상대 경로 | 빌드 컨텍스트 기준으로 동작 |
+| Docker 볼륨 마운트 | 절대 경로 | 정확한 호스트 경로 지정 필요 |
 ## 5. 권한 실습
+### 권한 숫자 표기 규칙
 
+권한은 소유자/그룹/others 3개 그룹으로 나뉘며 각 그룹의 권한을 숫자로 더해서 표현한다.
+```
+r (읽기)  = 4
+w (쓰기)  = 2
+x (실행)  = 1
+없음      = 0
+```
+
+각 그룹의 권한을 더한 숫자 3개를 나열한다.
+```
+755  =  rwx r-x r-x
+        ↑   ↑   ↑
+        7   5   5
+        소유자 그룹 others
+
+7 = 4+2+1 = rwx (읽기+쓰기+실행)
+5 = 4+0+1 = r-x (읽기+실행)
+5 = 4+0+1 = r-x (읽기+실행)
+```
 Git Bash에서는 Windows NTFS 파일시스템 한계로 chmod가 동작하지 않아 Docker 컨테이너(진짜 Linux 환경) 내부에서 실습을 진행하였다. (트러블슈팅 1번 참고)
 
 ### 파일 권한 변경
@@ -264,6 +322,24 @@ CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
 
 ## 9. Dockerfile 커스텀 이미지 제작
 
+### 이미지 vs 컨테이너 — 빌드/실행/변경 관점
+
+| 관점 | 이미지 | 컨테이너 |
+|---|---|---|
+| 빌드 | `docker build`로 생성 | 이미지를 기반으로 생성 |
+| 실행 | 실행되지 않음 (틀) | `docker run`으로 실행됨 |
+| 변경 | 불변 (변경 불가) | 실행 중 내부 변경 가능 |
+| 삭제 후 | 이미지는 그대로 남음 | 컨테이너 안의 변경사항 사라짐 |
+| 재사용 | 하나의 이미지로 컨테이너 여러 개 생성 가능 | 각 컨테이너는 독립적 |
+```
+docker build → 이미지 생성 (불변의 틀)
+                    ↓
+docker run  → 컨테이너 생성 (실행 가능한 인스턴스)
+                    ↓
+내부 변경   → 컨테이너에만 반영, 이미지는 그대로
+                    ↓
+docker rm   → 컨테이너 삭제, 변경사항 사라짐
+```
 ### 선택한 베이스 이미지
 nginx:latest (웹서버 베이스 이미지 활용 — A 방식)
 
@@ -299,6 +375,34 @@ d41eff40d2aa01927405b56c397c281988567907ba85f053da47d055939b5722
 ```
 
 ## 10. 포트 매핑 및 접속 증거
+
+### 컨테이너 내부 포트로 직접 접속할 수 없는 이유
+
+컨테이너는 격리된 네트워크 환경을 가진다. 컨테이너 내부의 포트는 외부(호스트)에서 직접 접근할 수 없다.
+```
+브라우저 → localhost:80 접속 시도
+         → 호스트의 80번 포트로 요청
+         → 컨테이너 내부 포트와 연결 안 됨
+         → 접속 실패
+```
+
+포트 매핑(`-p`)으로 호스트 포트와 컨테이너 포트를 연결해야 한다.
+```
+docker run -p 8081:80 my-nginx
+               ↑    ↑
+          호스트  컨테이너
+
+브라우저 → localhost:8081
+         → 호스트 8081 포트
+         → 컨테이너 80 포트로 전달
+         → nginx 응답
+         → 접속 성공
+```
+
+**포트 매핑이 필요한 이유**
+- 컨테이너는 격리된 환경이라 보안상 외부 접근이 기본 차단됨
+- 명시적으로 포트를 열어야 외부에서 접근 가능
+- 같은 이미지로 여러 컨테이너를 다른 포트로 동시에 실행 가능
 ```bash
 $ docker run -d -p 8081:80 --name my-nginx-container my-nginx
 ```
@@ -391,5 +495,32 @@ To https://github.com/junhnno/Codyssey_WorkSpace
 
 - **문제**: `/c/...` 형식으로 바인드 마운트 실행 시 파일이 반영되지 않음
 - **원인 가설**: Git Bash가 `/usr/share/nginx/html` 경로를 Windows 경로로 잘못 변환
+
+## 15. 검증 방법 — 재현 가능한 실행 방법
+
+아래 명령어를 순서대로 실행하면 전체 환경을 재현할 수 있다.
+```bash
+# 1. 저장소 클론
+git clone https://github.com/junhnno/Codyssey_WorkSpace
+cd Codyssey_WorkSpace
+
+# 2. 이미지 빌드
+docker build -t my-nginx .
+
+# 3. 포트 매핑으로 컨테이너 실행
+docker run -d -p 8081:80 --name my-nginx-container my-nginx
+
+# 4. 바인드 마운트로 실행 (개발용)
+docker run -d -p 8081:80 \
+  -v "C:/경로/app:/usr/share/nginx/html" \
+  --name my-nginx-container my-nginx
+
+# 5. 볼륨 생성 및 연결
+docker volume create myvolume
+docker run -it --name volume-test -v myvolume:/mydata ubuntu bash
+
+# 6. 브라우저 접속 확인
+# http://localhost:8081
+```
 - **확인**: `docker exec`로 컨테이너 내부 확인 시 `C:/Program Files/Git/usr/share/nginx/html` 경로로 마운트됨
 - **해결**: 호스트 경로를 `"C:/Main_Folder/..."` Windows 형식으로 변경하여 실행 → 정상 동작 확인0
