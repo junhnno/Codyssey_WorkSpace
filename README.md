@@ -491,11 +491,6 @@ To https://github.com/junhnno/Codyssey_WorkSpace
 - **확인**: `bind: Only one usage of each socket address` 오류 메시지 확인
 - **해결**: 포트를 8081로 변경하여 실행 → 정상 동작 확인
 
-### 트러블슈팅 3 — Git Bash 바인드 마운트 경로 오류
-
-- **문제**: `/c/...` 형식으로 바인드 마운트 실행 시 파일이 반영되지 않음
-- **원인 가설**: Git Bash가 `/usr/share/nginx/html` 경로를 Windows 경로로 잘못 변환
-
 ## 15. 검증 방법 — 재현 가능한 실행 방법
 
 아래 명령어를 순서대로 실행하면 전체 환경을 재현할 수 있다.
